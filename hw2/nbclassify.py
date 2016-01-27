@@ -42,36 +42,36 @@ class NaiveClassifier:
 test_dir = sys.argv[1]
 
 loader = ReviewLoader()
-truthful = loader.load(test_dir + "/negative/truthful", 'truthful') \
-           + loader.load(test_dir + "/positive/truthful", 'truthful')
-deceptive = loader.load(test_dir + "/negative/deceptive", 'deceptive') \
-            + loader.load(test_dir + "/positive/deceptive", 'deceptive')
-positive = loader.load(test_dir + '/positive', 'positive')
-negative = loader.load(test_dir + '/negative', 'negative')
-
-test_data1 = truthful + deceptive
-test_data2 = positive + negative
+# truthful = loader.load(test_dir + "/negative/truthful", 'truthful') \
+#            + loader.load(test_dir + "/positive/truthful", 'truthful')
+# deceptive = loader.load(test_dir + "/negative/deceptive", 'deceptive') \
+#             + loader.load(test_dir + "/positive/deceptive", 'deceptive')
+# positive = loader.load(test_dir + '/positive', 'positive')
+# negative = loader.load(test_dir + '/negative', 'negative')
+#
+# test_data1 = truthful + deceptive
+# test_data2 = positive + negative
+test_data = loader.load_without_label(test_dir)
 
 model_params = ParameterReader('nbmodel.txt').read(2)
-
 deceptive_model_params = model_params[0]
 negative_model_params = model_params[1]
-deception_classifier = NaiveClassifier(deceptive_model_params[0], deceptive_model_params[1], test_data1)
-negativity_classifier = NaiveClassifier(negative_model_params[0], negative_model_params[1], test_data2)
+deception_classifier = NaiveClassifier(deceptive_model_params[0], deceptive_model_params[1], test_data)
+negativity_classifier = NaiveClassifier(negative_model_params[0], negative_model_params[1], test_data)
 
-result1 = deception_classifier.classify_all()
-result2 = negativity_classifier.classify_all()
-
-correct = reduce(lambda acc, x: acc + 1 if x[1] == x[0].label else acc, result1, 0)
-print 1.0 * correct / len(test_data1)
-correct = reduce(lambda acc, x: acc + 1 if x[1] == x[0].label else acc, result2, 0)
-print 1.0 * correct / len(test_data2)
+deception_result = deception_classifier.classify_all()
+negative_result = negativity_classifier.classify_all()
 
 classified_result = {}
-for result in result1:
+for result in deception_result:
     classified_result[result[0].path] = [result[1]]
-for result in result2:
+for result in negative_result:
     classified_result[result[0].path].append(result[1])
 
 writer = ResultWriter(classified_result)
 writer.write('nboutput.txt')
+
+# correct = reduce(lambda acc, x: acc + 1 if x[1] == x[0].label else acc, deception_result, 0)
+# print 1.0 * correct / len(test_data1)
+# correct = reduce(lambda acc, x: acc + 1 if x[1] == x[0].label else acc, negative_result, 0)
+# print 1.0 * correct / len(test_data2)
