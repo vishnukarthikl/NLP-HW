@@ -66,15 +66,19 @@ class NaiveLearner:
         return probabilities
 
 
-train_data_dir = sys.argv[1]
+train_dir = sys.argv[1]
 
 loader = ReviewLoader()
-negative_reviews = loader.load(train_data_dir + '/positive_polarity/deceptive_from_MTurk', 'deceptive') + \
-                   loader.load(train_data_dir + '/negative_polarity/deceptive_from_MTurk', 'deceptive')
-positive_reviews = loader.load(train_data_dir + '/negative_polarity/truthful_from_Web', 'truthful') + \
-                   loader.load(train_data_dir + '/positive_polarity/truthful_from_TripAdvisor', 'truthful')
-learner = NaiveLearner(negative_reviews + positive_reviews)
+deceptive = loader.load(train_dir + '/positive_polarity/deceptive_from_MTurk', 'deceptive') + \
+            loader.load(train_dir + '/negative_polarity/deceptive_from_MTurk', 'deceptive')
+truthful = loader.load(train_dir + '/negative_polarity/truthful_from_Web', 'truthful') + \
+           loader.load(train_dir + '/positive_polarity/truthful_from_TripAdvisor', 'truthful')
+deception_learner = NaiveLearner(deceptive + truthful)
 
-writer = ParameterWriter(learner.parameters, learner.sampled_label_probabilities())
-writer.write('nbmodel.txt')
+positive = loader.load(train_dir + '/positive_polarity', 'positive')
+negative = loader.load(train_dir + '/negative_polarity', 'negative')
+negativity_learner = NaiveLearner(positive + negative)
 
+writer = ParameterWriter('nbmodel.txt')
+writer.write(deception_learner.parameters, deception_learner.sampled_label_probabilities())
+writer.write(negativity_learner.parameters, negativity_learner.sampled_label_probabilities())

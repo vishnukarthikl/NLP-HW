@@ -7,6 +7,18 @@ from param_reader_writer import ParameterReader
 from review_loader import ReviewLoader
 
 
+class ResultWriter:
+    def __init__(self, classification_result):
+        self.classification_result = classification_result
+
+    def write(self, file_name):
+        with open(file_name, 'w') as file:
+            file.truncate()
+            for path, labels in self.classification_result.iteritems():
+                file.write(labels[0] + " " + labels[1] + " " + path)
+                file.write('\n')
+
+
 class NaiveClassifier:
     def __init__(self, parameters, label_probabilities, to_classify):
         self.parameters = parameters
@@ -27,17 +39,39 @@ class NaiveClassifier:
         return data, max(post_probability.iteritems(), key=operator.itemgetter(1))[0]
 
 
-test_data_dir = sys.argv[1]
+test_dir = sys.argv[1]
 
 loader = ReviewLoader()
-truthful = loader.load(test_data_dir + "/negative/truthful", 'truthful') \
-           + loader.load(test_data_dir + "/positive/truthful", 'truthful')
-deceptive = loader.load(test_data_dir + "/negative/deceptive", 'deceptive') \
-            + loader.load(test_data_dir + "/positive/deceptive", 'deceptive')
-test_data = truthful + deceptive
-label_parameters, prior_label_probability = ParameterReader('nbmodel.txt').read()
-classifier = NaiveClassifier(label_parameters, prior_label_probability, test_data)
-result = classifier.classify_all()
+truthful = loader.load(test_dir + "/negative/truthful", 'truthful') \
+           + loader.load(test_dir + "/positive/truthful", 'truthful')
+deceptive = loader.load(test_dir + "/negative/deceptive", 'deceptive') \
+            + loader.load(test_dir + "/positive/deceptive", 'deceptive')
+positive = loader.load(test_dir + '/positive', 'positive')
+negative = loader.load(test_dir + '/negative', 'negative')
 
-correct = reduce(lambda acc, x: acc + 1 if x[1] == x[0].label else acc, result, 0)
-print 1.0 * correct / len(test_data)
+test_data1 = truthful + deceptive
+test_data2 = positive + negative
+
+model_params = ParameterReader('nbmodel.txt').read(2)
+
+deceptive_model_params = model_params[0]
+negative_model_params = model_params[1]
+deception_classifier = NaiveClassifier(deceptive_model_params[0], deceptive_model_params[1], test_data1)
+negativity_classifier = NaiveClassifier(negative_model_params[0], negative_model_params[1], test_data2)
+
+result1 = deception_classifier.classify_all()
+result2 = negativity_classifier.classify_all()
+
+correct = reduce(lambda acc, x: acc + 1 if x[1] == x[0].label else acc, result1, 0)
+print 1.0 * correct / len(test_data1)
+correct = reduce(lambda acc, x: acc + 1 if x[1] == x[0].label else acc, result2, 0)
+print 1.0 * correct / len(test_data2)
+
+classified_result = {}
+for result in result1:
+    classified_result[result[0].path] = [result[1]]
+for result in result2:
+    classified_result[result[0].path].append(result[1])
+
+writer = ResultWriter(classified_result)
+writer.write('nboutput.txt')
