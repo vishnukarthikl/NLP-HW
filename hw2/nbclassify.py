@@ -1,3 +1,4 @@
+import math
 import operator
 import os
 import random
@@ -5,36 +6,38 @@ import re
 import sys
 
 
-class LabelParameter:
-    def __init__(self, label):
-        self.vocabulary_size = 0
-        self.label = label
-        self.word_count = {}
+class LabelParameters:
+    def __init__(self, vocabulary, labels):
+        self.vocabulary = vocabulary
+        self.labels = labels
+        self.word_count_for_label = {}
 
-    def add_word(self, word):
-        if word in self.word_count:
-            self.word_count[word] += 1
-        else:
-            self.word_count[word] = 1
-        self.vocabulary_size += 1
+    def process(self, word_counts, label):
+        self.word_count_for_label[label] = word_counts
 
-    def probability(self, word):
-        if word not in self.word_count:
-            return 1.0
-        return 1.0 * self.word_count[word] / self.vocabulary_size
+    def count(self, word, label):
+        if label in self.word_count_for_label:
+            if word in self.word_count_for_label[label]:
+                return self.word_count_for_label[label][word]
+        return 0
 
-    def all_probabilities(self):
-        return map(lambda x: (x, self.probability(x)), self.word_count.iterkeys())
+    def probability(self, word, label):
+        return 1.0 * (self.count(word, label) + 1) / (self.total_word_count[label] + len(self.vocabulary))
+
+    def count_for_label(self, label):
+        return reduce(lambda acc, x: acc + x, self.word_count_for_label[label].values(), 0)
+
+    def precompute(self):
+        self.total_word_count = {}
+        for label in self.labels:
+            self.total_word_count[label] = self.count_for_label(label)
 
 
 class NaiveLearner:
     def __init__(self, data):
         self.all_data = data
-        self.populate_training_data(0.7)
+        self.populate_training_data(.9)
         self.learn_parameters()
-
-    def get_parameters(self, label):
-        return self.parameters[label]
 
     def populate_training_data(self, ratio):
         self.labels = []
@@ -56,22 +59,24 @@ class NaiveLearner:
             self.labelled_data[label] = [self.labelled_data[label][i] for i in indices_to_include]
 
     def learn_parameters(self):
-        self.parameters = {}
+        self.parameters = LabelParameters(self.words_count_from(self.all_labelled_data()), self.labels)
         for label in self.labels:
-            self.parameters[label] = self.process(self.labelled_data[label], label)
+            self.parameters.process(self.words_count_from(self.labelled_data[label]), label)
+        self.parameters.precompute()
 
-    def process(self, data, label):
-        parameter = LabelParameter(label)
+    def words_count_from(self, data):
+        words_count = {}
         for item in data:
             words = re.compile('\w+').findall(item.text)
-            map(parameter.add_word, words)
-        return parameter
+            for word in words:
+                if word in words_count:
+                    words_count[word] += 1
+                else:
+                    words_count[word] = 1
+        return words_count
 
-    def word_probability_given_label(self, word, label):
-        return self.parameters[label].probability(word)
-
-    def probabilities(self, label):
-        return self.parameters[label].all_probabilities()
+    def all_labelled_data(self):
+        return reduce(lambda acc, x: acc + x, self.labelled_data.values(), [])
 
     def label_probability(self, label):
         count = 0
@@ -100,8 +105,9 @@ class NaiveClassifier:
         post_probability = {}
         for label, probability in self.label_probabilities.iteritems():
             words = re.compile('\w+').findall(data.text)
-            post_probability[label] = reduce(lambda acc, word: self.parameters[label].probability(word), words,
-                                             probability)
+            post_probability[label] = reduce(
+                    lambda acc, word: acc + math.log(self.parameters.probability(word, label), 10), words,
+                    math.log(probability))
 
         return data, max(post_probability.iteritems(), key=operator.itemgetter(1))[0]
 
@@ -133,9 +139,12 @@ class ReviewLoader:
 train_data_dir = sys.argv[1]
 
 loader = ReviewLoader()
-negative_reviews = loader.load(train_data_dir + '/positive_polarity', '1')
-positive_reviews = loader.load(train_data_dir + '/negative_polarity', '0')
+negative_reviews = loader.load(train_data_dir + '/positive_polarity/deceptive_from_MTurk', '0') + \
+                   loader.load(train_data_dir + '/negative_polarity/deceptive_from_MTurk', '0')
+positive_reviews = loader.load(train_data_dir + '/positive_polarity/truthful_from_Web', '1') + \
+                   loader.load(train_data_dir + '/negative_polarity/truthful_from_Web', '1')
 learner = NaiveLearner(negative_reviews + positive_reviews)
+
 test_data = reduce(lambda acc, x: acc + x, learner.test_data.values(), [])
 classifier = NaiveClassifier(learner.parameters, learner.label_probabilities(), test_data)
 result = classifier.classify_all()
