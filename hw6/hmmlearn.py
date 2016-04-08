@@ -1,3 +1,4 @@
+import cPickle as pickle
 import sys
 from itertools import izip, islice
 
@@ -49,11 +50,6 @@ class ProbabilityMatrix:
                 else:
                     self.probability[current][next] = 1. * count / total
 
-    def probability_for(self, current, next):
-        if current in self.probability and next in self.probability[current]:
-            return self.probability[current][next]
-        else:
-            return 0
 
 class HMMLearner:
     def __init__(self):
@@ -84,6 +80,12 @@ class HMMLearner:
             all_word_tags.append((word, tag))
         return all_word_tags
 
+    def states(self):
+        return self.all_tags
+
+    def to_dump(self):
+        return {'transition': self.transition.probability, 'emission': self.emission.probability}
+
 
 file_path = sys.argv[1]
 hmmLearner = HMMLearner()
@@ -91,4 +93,4 @@ with open(file_path, "r") as f:
     for line in f:
         hmmLearner.process(line)
 hmmLearner.learn()
-print len(hmmLearner.transition.counts.keys())
+pickle.dump(hmmLearner.to_dump(), open("hmmmodel.txt", "wb"))
