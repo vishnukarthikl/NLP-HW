@@ -50,17 +50,30 @@ class ProbabilityMatrix:
                 else:
                     self.probability[current][next] = 1. * count / total
 
+    def calculate_initial_probability(self, tags):
+        start_state = "START"
+        counts = self.counts[start_state]
+        self.probability[start_state] = {}
+        total = sum(counts.values())
+        for tag in tags:
+            if tag in counts:
+                self.probability[start_state][tag] = 1. * counts[tag] / total
+            else:
+                self.probability[start_state][tag] = 0
+
 
 class HMMLearner:
     def __init__(self):
         self.transition = ProbabilityMatrix(True)
         self.emission = ProbabilityMatrix()
+        self.initial = ProbabilityMatrix(False)
         self.all_tags = set()
 
     def process(self, tagged_sentence):
         word_tags = self.split_word_tags(tagged_sentence)
         tags = map(lambda x: x[1], word_tags)
         self.all_tags = self.all_tags.union(tags)
+        self.initial.update_counts("START", tags[0])
         for current, next in izip(tags, islice(tags, 1, None)):
             self.transition.update_counts(current, next)
         for word, tag in word_tags:
@@ -68,6 +81,7 @@ class HMMLearner:
 
     def learn(self):
         self.all_tags = self.emission.counts.keys()
+        self.initial.calculate_initial_probability(self.all_tags)
         self.transition.calculate_transition_probability()
         self.emission.calculate_emission_probability()
 
@@ -84,7 +98,8 @@ class HMMLearner:
         return self.all_tags
 
     def to_dump(self):
-        return {'transition': self.transition.probability, 'emission': self.emission.probability}
+        return {'transition': self.transition.probability, 'emission': self.emission.probability,
+                'initial': self.initial.probability}
 
 
 file_path = sys.argv[1]
