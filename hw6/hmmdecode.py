@@ -1,5 +1,7 @@
 import cPickle as pickle
+import operator
 import sys
+from collections import Counter
 from math import log
 
 
@@ -16,7 +18,7 @@ class HMMTagger:
         self.emission = emission
         self.transition = transition
         self.states = transition.keys()
-        self.initial_probability = {state: 1. / len(self.states) for (state) in self.states}
+        self.count = Counter()
 
     def process(self, line):
         words = line.split()
@@ -27,12 +29,16 @@ class HMMTagger:
         for t in range(1, len(words)):
             probability[t] = {}
             backpointers[t] = {}
-            possible_prev_states = filter(lambda s: probability[t - 1][s] != 0, self.states)
+            possible_prev_states = map(lambda x: x[0],
+                                       [max(probability[t - 1].iteritems(), key=operator.itemgetter(1))])
+            # if len(possible_prev_states) > 1:
+            #     possible_prev_states = map(lambda x: x[0], heapq.nlargest(1, probability[t - 1].iteritems(),
+            #                                                               key=operator.itemgetter(1)))
             for state in self.states:
                 (prob, prev) = self.find_max_prev_probability(probability, state, t, words, possible_prev_states)
                 probability[t][state] = prob
                 backpointers[t][state] = prev
-            if len(filter(lambda x: x != 0.0, probability[t].values())) == 0:
+            if len(filter(lambda x: x > float('-inf'), probability[t].values())) == 0:
                 for state in self.states:
                     (prob, prev) = self.find_max_prev_probability_without_emission(probability, state, t, words,
                                                                                    possible_prev_states)
@@ -43,8 +49,8 @@ class HMMTagger:
         return zip(words, tags)
 
     def start_state_probabilities(self, words):
-        probabilities = {state: self.i(state) * self.e(state, words[0]) for state in self.states}
-        non_zero = filter(lambda (s, p): p != 0, probabilities.iteritems())
+        probabilities = {state: self.i(state) + self.e(state, words[0]) for state in self.states}
+        non_zero = filter(lambda (s, p): p > float('-inf'), probabilities.iteritems())
         if not non_zero:
             return {state: self.i(state) for state in self.states}
         return probabilities
@@ -59,17 +65,17 @@ class HMMTagger:
         return tags
 
     def find_max_prev_probability(self, probability, state, t, words, previous_states):
-        return max([(probability[t - 1][prev] * self.t(prev, state) * self.e(state, words[t]), prev) for prev in
+        return max([(probability[t - 1][prev] + self.t(prev, state) + self.e(state, words[t]), prev) for prev in
                     previous_states])
 
     def find_max_prev_probability_without_emission(self, probability, state, t, words, previous_states):
-        return max([(probability[t - 1][prev] * self.t(prev, state), prev) for prev in previous_states])
+        return max([(probability[t - 1][prev] + self.t(prev, state), prev) for prev in previous_states])
 
     def e(self, current, next):
-        return self.probability_for(self.emission, current, next)
+        return mod_log(self.probability_for(self.emission, current, next))
 
     def t(self, current, next):
-        return self.transition[current][next]
+        return mod_log(self.transition[current][next])
 
     def probability_for(self, matrix, current, next):
         if current in matrix and next in matrix[current]:
@@ -78,7 +84,7 @@ class HMMTagger:
             return 0
 
     def i(self, initial_state):
-        return self.probability_for(self.initial, "START", initial_state)
+        return mod_log(self.probability_for(self.initial, "START", initial_state))
 
 
 def make_string(result):
@@ -94,6 +100,4 @@ with open("hmmoutput.txt", "w") as fout:
     with open(file_path, "r") as fin:
         for line in fin:
             result = hmmTagger.process(line)
-            string = make_string(result)
-            # print string
-            fout.write(string + "\n")
+            fout.write(make_string(result) + "\n")
