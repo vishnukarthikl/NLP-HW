@@ -1,5 +1,4 @@
 import cPickle as pickle
-import operator
 import sys
 from collections import Counter
 from math import log
@@ -29,16 +28,12 @@ class HMMTagger:
         for t in range(1, len(words)):
             probability[t] = {}
             backpointers[t] = {}
-            possible_prev_states = map(lambda x: x[0],
-                                       [max(probability[t - 1].iteritems(), key=operator.itemgetter(1))])
-            # if len(possible_prev_states) > 1:
-            #     possible_prev_states = map(lambda x: x[0], heapq.nlargest(1, probability[t - 1].iteritems(),
-            #                                                               key=operator.itemgetter(1)))
+            possible_prev_states = self.probable_states(probability, backpointers, t - 1)
             for state in self.states:
                 (prob, prev) = self.find_max_prev_probability(probability, state, t, words, possible_prev_states)
                 probability[t][state] = prob
                 backpointers[t][state] = prev
-            if len(filter(lambda x: x > float('-inf'), probability[t].values())) == 0:
+            if len(self.probable_states(probability, backpointers, t)) == 0:
                 for state in self.states:
                     (prob, prev) = self.find_max_prev_probability_without_emission(probability, state, t, words,
                                                                                    possible_prev_states)
@@ -47,6 +42,9 @@ class HMMTagger:
 
         tags = self.tag_sequence(backpointers, probability, words)
         return zip(words, tags)
+
+    def probable_states(self, probability, backpointer, t):
+        return {k: v for k, v in probability[t].iteritems() if v > float('-inf')}.keys()
 
     def start_state_probabilities(self, words):
         probabilities = {state: self.i(state) + self.e(state, words[0]) for state in self.states}
@@ -65,7 +63,10 @@ class HMMTagger:
         return tags
 
     def find_max_prev_probability(self, probability, state, t, words, previous_states):
-        return max([(probability[t - 1][prev] + self.t(prev, state) + self.e(state, words[t]), prev) for prev in
+        emission = self.e(state, words[t])
+        if emission == float('-inf'):
+            return emission, '-'
+        return max([(probability[t - 1][prev] + self.t(prev, state) + emission, prev) for prev in
                     previous_states])
 
     def find_max_prev_probability_without_emission(self, probability, state, t, words, previous_states):
