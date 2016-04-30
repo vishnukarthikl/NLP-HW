@@ -1,14 +1,16 @@
 from __future__ import division
 
+import glob
 import math
+import os
 import sys
-from math import exp
 from collections import Counter
+from math import exp
 
 
 class Sentence:
     def __init__(self, line):
-        line = line.translate(None, "!@#$%^&*(){},./?<>\";")
+        line = line.strip()
         self.line = line
         self.words = self.line.split()
 
@@ -17,6 +19,12 @@ class Sentence:
 
     def size(self):
         return len(self.words)
+
+    def ngram_length(self, n):
+        return sum(self.ngram(n).values())
+
+    def __str__(self):
+        return self.line
 
 
 class TranslationFile:
@@ -40,11 +48,11 @@ class TranslationFile:
 
 
 class BleuCalculator:
-    def calculate(self, candidate, reference):
+    def calculate(self, candidate, references):
         precision = 0
         for n in range(1, 5):
-            precision += math.log(self.precision(candidate, reference, n))
-        return 1 / 4 * self.breverity_penality(candidate, reference) * exp(precision)
+            precision += 1 / 4 * math.log(self.precision(candidate, references, n))
+        return self.breverity_penality(candidate, reference) * exp(precision)
 
     def breverity_penality(self, c, r):
         len_c = c.size
@@ -54,13 +62,13 @@ class BleuCalculator:
         else:
             return exp(1 - (len_r / len_c))
 
-    def precision(self, candidate, reference, n):
+    def precision(self, candidate, references, n):
         numerator = 0
         denominator = 0
         for i in range(len(candidate)):
-            clip_count, total = self.counts(candidate.get(i), reference.get(i), n)
-            numerator += clip_count
-            denominator += total
+            candidate_sentence = candidate.get(i)
+            numerator += max(map(lambda r: self.counts(candidate_sentence, r.get(i), n), references))
+            denominator += candidate_sentence.ngram_length(n)
         return numerator / denominator
 
     def counts(self, candidate, reference, n):
@@ -70,14 +78,24 @@ class BleuCalculator:
         for c_ngram, c_count in c_ngrams.iteritems():
             if c_ngram in r_ngrams:
                 count += min(c_count, r_ngrams[c_ngram])
-        return count, len(c_ngrams)
+        return count
 
 
-candidate = TranslationFile(sys.argv[1])
-reference = TranslationFile(sys.argv[2])
+candidate_file_path = sys.argv[1]
+reference_path = sys.argv[2]
+candidate = TranslationFile(candidate_file_path)
+references = []
+if os.path.isdir(reference_path):
+    files = glob.glob(reference_path)
+    for file in files:
+        references.append(TranslationFile(file))
+else:
+    references.append(TranslationFile(reference_path))
+
+reference = TranslationFile(reference_path)
 calculator = BleuCalculator()
 with open("bleu_out.txt", "w") as fout:
     fout.truncate()
-    answer = calculator.calculate(candidate, reference)
+    answer = calculator.calculate(candidate, references)
     print answer
     fout.write(str(answer))
