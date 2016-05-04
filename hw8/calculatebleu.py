@@ -54,30 +54,46 @@ class BleuCalculator:
         return self.breverity_penality(candidate, references) * exp(precision)
 
     def breverity_penality(self, c, rs):
-        len_c = c.size
-        len_r = min(map(lambda r: r.size, rs))
+        len_c = 0
+        len_r = 0
+        for i in range(len(candidate)):
+            candidate_sentence = candidate.get(i)
+            min_reference_sentence = self.min_reference_size(rs, candidate_sentence, i)
+            len_c += candidate_sentence.size()
+            len_r += min_reference_sentence.size()
         if len_c > len_r:
             return 1
         else:
             return exp(1 - (len_r / len_c))
+
+    def min_reference_size(self, rs, candidate, i):
+        reference_sentences = map(lambda r: r.get(i), rs)
+        size_diff = map(lambda r: abs(candidate.size() - r.size()), reference_sentences)
+        min_reference_sentence = reference_sentences[size_diff.index(min(size_diff))]
+        return min_reference_sentence
 
     def precision(self, candidate, references, n):
         numerator = 0
         denominator = 0
         for i in range(len(candidate)):
             candidate_sentence = candidate.get(i)
-            numerator += max(map(lambda r: self.counts(candidate_sentence, r.get(i), n), references))
+            numerator += self.reference_count(candidate_sentence, references, i, n)
             denominator += candidate_sentence.ngram_length(n)
         return numerator / denominator
 
-    def counts(self, candidate, reference, n):
+    def counts(self, candidate, references, n):
         c_ngrams = candidate.ngram(n)
-        r_ngrams = reference.ngram(n)
+        r_ngrams = map(lambda r: r.ngram(n), references)
         count = 0
         for c_ngram, c_count in c_ngrams.iteritems():
-            if c_ngram in r_ngrams:
-                count += min(c_count, r_ngrams[c_ngram])
+            count += min(c_count, self.max_match(c_ngram, r_ngrams))
         return count
+
+    def reference_count(self, candidate, references, i, n):
+        return self.counts(candidate, map(lambda r: r.get(i), references), n)
+
+    def max_match(self, c_ngram, r_ngrams):
+        return max(map(lambda r: r[c_ngram], r_ngrams))
 
 
 candidate_file_path = sys.argv[1]
