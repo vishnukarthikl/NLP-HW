@@ -1,6 +1,5 @@
 from __future__ import division
 
-import glob
 import math
 import os
 import sys
@@ -52,11 +51,11 @@ class BleuCalculator:
         precision = 0
         for n in range(1, 5):
             precision += 1 / 4 * math.log(self.precision(candidate, references, n))
-        return self.breverity_penality(candidate, reference) * exp(precision)
+        return self.breverity_penality(candidate, references) * exp(precision)
 
-    def breverity_penality(self, c, r):
+    def breverity_penality(self, c, rs):
         len_c = c.size
-        len_r = r.size
+        len_r = min(map(lambda r: r.size, rs))
         if len_c > len_r:
             return 1
         else:
@@ -86,13 +85,12 @@ reference_path = sys.argv[2]
 candidate = TranslationFile(candidate_file_path)
 references = []
 if os.path.isdir(reference_path):
-    files = glob.glob(reference_path)
-    for file in files:
-        references.append(TranslationFile(file))
+    for dirpath, dirs, files in os.walk(reference_path):
+        for file in files:
+            references.append(TranslationFile(os.path.join(dirpath, file)))
 else:
     references.append(TranslationFile(reference_path))
 
-reference = TranslationFile(reference_path)
 calculator = BleuCalculator()
 with open("bleu_out.txt", "w") as fout:
     fout.truncate()
